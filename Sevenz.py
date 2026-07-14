@@ -773,6 +773,12 @@ def call_ai(
             last_error = ""
 
             for chosen_model in candidate_models:
+                token_budgets = [max_tokens]
+                boosted_budget = min(4096, max(64, int(max_tokens) * 2))
+                if boosted_budget not in token_budgets:
+                    token_budgets.append(boosted_budget)
+
+                for current_max_tokens in token_budgets:
                 for delay in retry_delays:
                     if delay > 0:
                         time.sleep(delay)
@@ -783,11 +789,14 @@ def call_ai(
                             system_prompt=system_prompt,
                             user_prompt=user_prompt,
                             temperature=temperature,
-                            max_tokens=max_tokens,
+                            max_tokens=current_max_tokens,
                         )
                         text, parse_note = gemini_extract_text(response_json)
                         response = response_json
                         if not text.strip():
+                            if "MAX_TOKENS" in (parse_note or "") and current_max_tokens < boosted_budget:
+                                # Retry same model once with a larger output budget.
+                                continue
                             details = parse_note or json.dumps(response_json, ensure_ascii=False)[:800]
                             return False, f"Gemini returned no text ({details})."
                         if track_usage:
