@@ -1110,18 +1110,40 @@ def make_pdf_bytes(title, body_text, provider_name, model_name):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
+
+    usable_w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    def safe_multi_line(text, line_h=8):
+        # Normalize to core-font-safe text and avoid tabs causing odd width issues.
+        safe = (text or "").replace("\t", "    ").encode("latin-1", errors="replace").decode("latin-1")
+        for raw_line in safe.splitlines() or [""]:
+            line = raw_line
+            # Split very long unbroken tokens so fpdf always has wrap opportunities.
+            if len(line) > 140 and " " not in line:
+                chunks = [line[i : i + 120] for i in range(0, len(line), 120)]
+            else:
+                chunks = [line]
+
+            for chunk in chunks:
+                try:
+                    pdf.set_x(pdf.l_margin)
+                    pdf.multi_cell(usable_w, line_h, chunk)
+                except Exception:
+                    # Last-resort fallback: truncate to avoid crashing app export flow.
+                    fallback = (chunk[:150] + "...") if len(chunk) > 150 else chunk
+                    pdf.set_x(pdf.l_margin)
+                    pdf.cell(usable_w, line_h, fallback)
+                    pdf.ln(line_h)
+
     pdf.set_font("Arial", "B", 14)
-    pdf.multi_cell(0, 10, title)
+    safe_multi_line(title, line_h=10)
     pdf.set_font("Arial", size=10)
-    pdf.multi_cell(0, 8, f"Provider: {provider_name} | Model: {model_name}")
-    pdf.multi_cell(0, 8, f"Exported at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    safe_multi_line(f"Provider: {provider_name} | Model: {model_name}", line_h=8)
+    safe_multi_line(f"Exported at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", line_h=8)
     pdf.ln(2)
     pdf.set_font("Arial", size=11)
 
-    # FPDF default font is Latin-based; unsupported glyphs become '?'.
-    safe_text = body_text.encode("latin-1", errors="replace").decode("latin-1")
-    for line in safe_text.splitlines():
-        pdf.multi_cell(0, 8, line)
+    safe_multi_line(body_text, line_h=8)
 
     pdf_bytes = pdf.output(dest="S").encode("latin-1")
     return BytesIO(pdf_bytes)
