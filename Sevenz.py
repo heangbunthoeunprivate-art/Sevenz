@@ -225,10 +225,10 @@ MODEL_OPTIONS = {
         "o3",
         "o1",
     ],
-    "Gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-pro-latest"],
+    "Gemini": ["gemini-2.5-flash", "gemini-2.5-pro-latest"],
 }
 
-GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-pro-latest"]
+GEMINI_FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro-latest"]
 SETTINGS_PATH = Path(__file__).with_name(".sevenz_settings.json")
 ENV_PATH = Path(__file__).with_name(".env")
 ENV_KEY_CANDIDATES = {
@@ -247,9 +247,17 @@ def load_local_settings():
     return {}
 
 
+def coerce_gemini_settings(settings):
+    coerced = dict(settings or {})
+    if coerced.get("api_provider") == "Gemini":
+        if coerced.get("api_model_choice") not in ["gemini-2.5-flash", "gemini-2.5-pro-latest"]:
+            coerced["api_model_choice"] = "gemini-2.5-flash"
+    return coerced
+
+
 def save_local_settings(data):
     try:
-        SETTINGS_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        SETTINGS_PATH.write_text(json.dumps(coerce_gemini_settings(data), ensure_ascii=False, indent=2), encoding="utf-8")
         return True
     except Exception:
         return False
@@ -1606,6 +1614,8 @@ if "settings_loaded" not in st.session_state:
     st.session_state.suno_status_path = loaded.get("suno_status_path", "/api/v1/generate/record-info?taskId={id}")
     st.session_state.suno_model = loaded.get("suno_model", "chirp-v3-5")
     st.session_state.suno_make_instrumental = bool(loaded.get("suno_make_instrumental", False))
+    if st.session_state.api_provider == "Gemini" and st.session_state.api_model_choice not in ["gemini-2.5-flash", "gemini-2.5-pro-latest"]:
+        st.session_state.api_model_choice = "gemini-2.5-flash"
     st.session_state.settings_loaded = True
 if "lyrics_history" not in st.session_state:
     st.session_state.lyrics_history = []
