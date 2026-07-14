@@ -1517,6 +1517,8 @@ if "health_model_status" not in st.session_state:
     st.session_state.health_model_status = "Unknown"
 if "health_last_message" not in st.session_state:
     st.session_state.health_last_message = ""
+if "ui_theme_mode" not in st.session_state:
+    st.session_state.ui_theme_mode = "pro"
 if "settings_loaded" not in st.session_state:
     loaded = load_local_settings()
     st.session_state.api_provider = loaded.get("api_provider", st.session_state.api_provider)
@@ -1524,6 +1526,7 @@ if "settings_loaded" not in st.session_state:
     st.session_state.api_model_custom = loaded.get("api_model_custom", st.session_state.api_model_custom)
     st.session_state.cost_safe_mode = loaded.get("cost_safe_mode", st.session_state.cost_safe_mode)
     st.session_state.cost_safe_cap = int(loaded.get("cost_safe_cap", st.session_state.cost_safe_cap))
+    st.session_state.ui_theme_mode = loaded.get("ui_theme_mode", st.session_state.ui_theme_mode)
     st.session_state.suno_base_url = loaded.get("suno_base_url", "https://api.sunoapi.org")
     st.session_state.suno_create_path = loaded.get("suno_create_path", "/api/v1/generate")
     st.session_state.suno_status_path = loaded.get("suno_status_path", "/api/v1/generate/record-info?taskId={id}")
@@ -1572,6 +1575,30 @@ if "active_menu" not in st.session_state:
     st.session_state.active_menu = "compose"
 
 ensure_daily_usage_state()
+
+if st.session_state.get("ui_theme_mode", "pro") == "classic":
+    st.markdown(
+        """
+<style>
+.stApp {
+    background: #0b1119 !important;
+}
+.hero,
+.pro-card,
+.quickbar,
+.block-container {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+.logo-7code,
+.logo-7code::before,
+.stButton > button {
+    animation: none !important;
+}
+</style>
+""",
+        unsafe_allow_html=True,
+    )
 
 st.markdown(
     """
@@ -1646,6 +1673,105 @@ with qa4:
     if st.button("⬇️ Export TXT", use_container_width=True, key="quick_export"):
         st.session_state.active_menu = "export"
         st.session_state.quick_action = "export"
+st.markdown("</div>", unsafe_allow_html=True)
+
+st.markdown("<div class='pro-card'><div class='card-kicker'>System Status</div>", unsafe_allow_html=True)
+s1, s2, s3, s4, s5 = st.columns(5)
+s1.metric("Provider", st.session_state.get("api_provider", "-"))
+s2.metric("Model", st.session_state.get("api_model_choice", "-"))
+s3.metric("Suno Host", (st.session_state.get("suno_base_url", "-") or "-").replace("https://", "")[:28])
+s4.metric("Theme", st.session_state.get("ui_theme_mode", "pro").capitalize())
+s5.metric("Version", os.getenv("APP_VERSION", "local-dev"))
+
+if st.session_state.get("health_last_message"):
+    st.caption(f"Last error/status: {st.session_state.health_last_message}")
+
+tool_a, tool_b, tool_c = st.columns([1, 1, 1.5])
+with tool_a:
+    if st.button("🎨 Reset UI Theme", use_container_width=True, key="reset_ui_theme_btn"):
+        st.session_state.ui_theme_mode = "classic"
+        st.session_state.active_menu = "compose"
+        st.session_state.quick_action = ""
+        save_local_settings(
+            {
+                "api_provider": st.session_state.get("api_provider", "Gemini"),
+                "api_model_choice": st.session_state.get("api_model_choice", "gemini-2.5-pro"),
+                "api_model_custom": st.session_state.get("api_model_custom", ""),
+                "cost_safe_mode": bool(st.session_state.get("cost_safe_mode", False)),
+                "cost_safe_cap": int(st.session_state.get("cost_safe_cap", 500)),
+                "ui_theme_mode": st.session_state.get("ui_theme_mode", "classic"),
+                "suno_base_url": st.session_state.get("suno_base_url", "https://api.sunoapi.org"),
+                "suno_create_path": st.session_state.get("suno_create_path", "/api/v1/generate"),
+                "suno_status_path": st.session_state.get("suno_status_path", "/api/v1/generate/record-info?taskId={id}"),
+                "suno_model": st.session_state.get("suno_model", "chirp-v3-5"),
+                "suno_make_instrumental": bool(st.session_state.get("suno_make_instrumental", False)),
+            }
+        )
+        st.toast("UI theme reset to classic", icon="✅")
+        st.rerun()
+
+settings_snapshot = {
+    "api_provider": st.session_state.get("api_provider", "Gemini"),
+    "api_model_choice": st.session_state.get("api_model_choice", "gemini-2.5-pro"),
+    "api_model_custom": st.session_state.get("api_model_custom", ""),
+    "cost_safe_mode": bool(st.session_state.get("cost_safe_mode", False)),
+    "cost_safe_cap": int(st.session_state.get("cost_safe_cap", 500)),
+    "ui_theme_mode": st.session_state.get("ui_theme_mode", "pro"),
+    "suno_base_url": st.session_state.get("suno_base_url", "https://api.sunoapi.org"),
+    "suno_create_path": st.session_state.get("suno_create_path", "/api/v1/generate"),
+    "suno_status_path": st.session_state.get("suno_status_path", "/api/v1/generate/record-info?taskId={id}"),
+    "suno_model": st.session_state.get("suno_model", "chirp-v3-5"),
+    "suno_make_instrumental": bool(st.session_state.get("suno_make_instrumental", False)),
+}
+
+with tool_b:
+    st.download_button(
+        "⬇️ Backup Settings",
+        data=json.dumps(settings_snapshot, ensure_ascii=False, indent=2),
+        file_name="sevenz_settings_backup.json",
+        mime="application/json",
+        use_container_width=True,
+        key="backup_settings_btn",
+    )
+
+with tool_c:
+    import_file = st.file_uploader("Import settings (.json)", type=["json"], key="settings_import_file")
+    if st.button("📥 Apply Imported Settings", use_container_width=True, key="apply_import_settings_btn"):
+        if not import_file:
+            st.warning("Please choose a JSON settings file first")
+        else:
+            try:
+                imported = json.loads(import_file.getvalue().decode("utf-8"))
+                if not isinstance(imported, dict):
+                    raise ValueError("Settings file must be a JSON object")
+
+                allowed_keys = {
+                    "api_provider",
+                    "api_model_choice",
+                    "api_model_custom",
+                    "cost_safe_mode",
+                    "cost_safe_cap",
+                    "ui_theme_mode",
+                    "suno_base_url",
+                    "suno_create_path",
+                    "suno_status_path",
+                    "suno_model",
+                    "suno_make_instrumental",
+                }
+                imported_clean = {k: v for k, v in imported.items() if k in allowed_keys}
+                if not imported_clean:
+                    st.warning("No valid settings keys found in file")
+                else:
+                    merged = load_local_settings()
+                    merged.update(imported_clean)
+                    save_local_settings(merged)
+                    for k, v in imported_clean.items():
+                        st.session_state[k] = v
+                    st.toast("Settings imported successfully", icon="✅")
+                    st.rerun()
+            except Exception as exc:
+                st.error(f"Failed to import settings: {str(exc)[:140]}")
+
 st.markdown("</div>", unsafe_allow_html=True)
 
 mode = st.radio("⚙️ របៀបប្រើប្រាស់:", ["🆓 ឥតគិតថ្លៃ (Prompt)", "🚀 ស្វ័យប្រវត្តិ (API)"], horizontal=True)
@@ -1739,6 +1865,7 @@ if "ស្វ័យប្រវត្តិ" in mode:
                     "api_model_custom": st.session_state.api_model_custom,
                     "cost_safe_mode": st.session_state.cost_safe_mode,
                     "cost_safe_cap": int(st.session_state.cost_safe_cap),
+                    "ui_theme_mode": st.session_state.get("ui_theme_mode", "pro"),
                     "suno_base_url": st.session_state.get("suno_base_url", "https://api.sunoapi.org"),
                     "suno_create_path": st.session_state.get("suno_create_path", "/api/v1/generate"),
                     "suno_status_path": st.session_state.get("suno_status_path", "/api/v1/generate/record-info?taskId={id}"),
@@ -1778,6 +1905,7 @@ if "ស្វ័យប្រវត្តិ" in mode:
             "api_model_custom": st.session_state.api_model_custom,
             "cost_safe_mode": st.session_state.cost_safe_mode,
             "cost_safe_cap": int(st.session_state.cost_safe_cap),
+            "ui_theme_mode": st.session_state.get("ui_theme_mode", "pro"),
             "suno_base_url": st.session_state.get("suno_base_url", "https://api.sunoapi.org"),
             "suno_create_path": st.session_state.get("suno_create_path", "/api/v1/generate"),
             "suno_status_path": st.session_state.get("suno_status_path", "/api/v1/generate/record-info?taskId={id}"),
@@ -2329,6 +2457,7 @@ with tab4:
                 "api_model_custom": st.session_state.get("api_model_custom", ""),
                 "cost_safe_mode": bool(st.session_state.get("cost_safe_mode", False)),
                 "cost_safe_cap": int(st.session_state.get("cost_safe_cap", 2000)),
+                "ui_theme_mode": st.session_state.get("ui_theme_mode", "pro"),
                 "suno_base_url": st.session_state.suno_base_url,
                 "suno_create_path": st.session_state.suno_create_path,
                 "suno_status_path": st.session_state.suno_status_path,
