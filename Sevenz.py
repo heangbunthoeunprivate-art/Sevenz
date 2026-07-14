@@ -1258,6 +1258,29 @@ header[data-testid="stHeader"] {
     gap: 10px;
 }
 
+.logo-link {
+    text-decoration: none;
+    display: inline-block;
+    cursor: pointer;
+}
+
+.logo-link .logo-7code {
+    transition: transform 0.16s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.logo-link:hover .logo-7code,
+.logo-link:focus-visible .logo-7code {
+    transform: translateY(-1px) scale(1.03);
+    box-shadow: 0 0 0 1px rgba(177, 220, 255, 0.35), 0 8px 18px rgba(41, 120, 204, 0.26);
+    filter: saturate(1.12);
+}
+
+.logo-link:focus-visible {
+    outline: 2px solid rgba(137, 200, 255, 0.75);
+    outline-offset: 2px;
+    border-radius: 999px;
+}
+
 .logo-7code {
     display: inline-flex;
     align-items: center;
@@ -1574,6 +1597,22 @@ if "quick_action" not in st.session_state:
 if "active_menu" not in st.session_state:
     st.session_state.active_menu = "compose"
 
+try:
+    nav_param = st.query_params.get("nav", "")
+except Exception:
+    nav_param = ""
+
+if isinstance(nav_param, list):
+    nav_param = nav_param[0] if nav_param else ""
+
+if str(nav_param).strip().lower() == "home":
+    st.session_state.active_menu = "compose"
+    st.session_state.quick_action = ""
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+
 ensure_daily_usage_state()
 
 if st.session_state.get("ui_theme_mode", "pro") == "classic":
@@ -1604,7 +1643,7 @@ st.markdown(
     """
 <div class="hero">
     <div class="hero-brand">
-        <div class="logo-7code">7 CODE</div>
+        <a class="logo-link" href="?nav=home" target="_self" rel="noopener noreferrer"><div class="logo-7code">7 CODE</div></a>
         <div class="hero-title">SEVENZ Studio Pro</div>
     </div>
     <div class="hero-sub">Compose smarter, judge faster, produce cleaner tracks in one professional workflow.</div>
