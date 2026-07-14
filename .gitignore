@@ -1,6 +1,34 @@
-.venv/
-__pycache__/
-*.pyc
-.sevenz_settings.json
+﻿# Secrets and local settings
 .env
 .streamlit/secrets.toml
+.sevenz_settings.json
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache/build
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Test and tooling caches
+.pytest_cache/
+.mypy_cache/
+.nox/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editor/system
+.ipynb_checkpoints/
+.DS_Store
