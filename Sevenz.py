@@ -34,6 +34,10 @@ except ImportError:
     HAS_AUDIO = False
 
 
+GEMINI_MODEL_CACHE = {}
+GEMINI_MODEL_CACHE_TTL_SEC = 900
+
+
 STRUCTURES = {
     "ធម្មតា (Standard)": "[Intro]\n[Verse 1]\n[Pre-Chorus]\n[Chorus]\n[Verse 2]\n[Chorus]\n[Bridge]\n[Chorus]\n[Outro]",
     "រ៉េប (Rap/Hip-Hop)": "[Intro]\n[Verse 1 (Rap)]\n[Chorus (Hook)]\n[Verse 2 (Rap)]\n[Chorus (Hook)]\n[Bridge (Rap)]\n[Chorus (Hook)]\n[Outro]",
@@ -658,6 +662,11 @@ def gemini_generate_content_rest(api_key, model, system_prompt, user_prompt, tem
 
 
 def gemini_list_models_rest(api_key):
+    now_ts = time.time()
+    cached = GEMINI_MODEL_CACHE.get(api_key)
+    if cached and (now_ts - cached.get("ts", 0) <= GEMINI_MODEL_CACHE_TTL_SEC):
+        return list(cached.get("models", []))
+
     for api_version in ["v1beta", "v1"]:
         url = f"https://generativelanguage.googleapis.com/{api_version}/models"
         response = requests.get(url, params={"key": api_key}, timeout=30)
@@ -674,9 +683,14 @@ def gemini_list_models_rest(api_key):
                         name = name.split("models/", 1)[1]
                     if name:
                         model_names.append(name)
+            GEMINI_MODEL_CACHE[api_key] = {"ts": now_ts, "models": model_names}
             return model_names
         except Exception:
             return []
+
+    if cached:
+        # Fallback to stale cache when model listing endpoint is temporarily unavailable.
+        return list(cached.get("models", []))
     return []
 
 
@@ -711,6 +725,7 @@ def gemini_extract_text(response_json):
 
     candidates = response_json.get("candidates") or []
     if candidates:
+        best_text = ""
         finish_reasons = []
         for candidate in candidates:
             if not isinstance(candidate, dict):
@@ -726,13 +741,22 @@ def gemini_extract_text(response_json):
                         parts_text.append("[inline_data]")
                     elif isinstance(part.get("functionCall"), dict):
                         parts_text.append("[functionCall]")
-            text = "\n".join(parts_text).strip()
-            if text:
-                return text, ""
-
             finish_reason = candidate.get("finishReason") or candidate.get("finish_reason") or ""
             if finish_reason:
                 finish_reasons.append(str(finish_reason))
+
+            text = "\n".join(parts_text).strip()
+            if text and not best_text:
+                best_text = text
+
+        if best_text:
+            if finish_reasons:
+                unique_reasons = []
+                for reason in finish_reasons:
+                    if reason not in unique_reasons:
+                        unique_reasons.append(reason)
+                return best_text, f"finishReason={','.join(unique_reasons)}"
+            return best_text, ""
 
         if finish_reasons:
             unique_reasons = []
@@ -782,6 +806,26 @@ def call_ai(
             candidate_models = gemini_candidate_models(api_key, model)
             last_error = ""
 
+            def continue_gemini_output(chosen_model, base_user_prompt, existing_text, request_max_tokens):
+                continuation_prompt = (
+                    "Continue the same answer from where it stopped.\n"
+                    "Do not repeat earlier lines.\n"
+                    "Return only the continuation text.\n\n"
+                    f"Original request:\n{base_user_prompt}\n\n"
+                    "Existing output tail:\n"
+                    f"{existing_text[-3000:]}\n\n"
+                    "Continue now:"
+                )
+                response_json = gemini_generate_content_rest(
+                    api_key=api_key,
+                    model=chosen_model,
+                    system_prompt=system_prompt,
+                    user_prompt=continuation_prompt,
+                    temperature=temperature,
+                    max_tokens=request_max_tokens,
+                )
+                return gemini_extract_text(response_json), response_json
+
             for chosen_model in candidate_models:
                 # Progressively increase output budget for Gemini until the API ceiling.
                 token_budgets = []
@@ -821,6 +865,25 @@ def call_ai(
                                     break
                                 details = parse_note or json.dumps(response_json, ensure_ascii=False)[:800]
                                 return False, f"Gemini returned no text ({details})."
+
+                            if "MAX_TOKENS" in (parse_note or ""):
+                                assembled_parts = [text.strip()]
+                                continuation_source = text
+                                for _ in range(2):
+                                    (cont_text, cont_note), cont_response_json = continue_gemini_output(
+                                        chosen_model,
+                                        user_prompt,
+                                        continuation_source,
+                                        current_max_tokens,
+                                    )
+                                    if cont_text.strip():
+                                        assembled_parts.append(cont_text.strip())
+                                        continuation_source = "\n\n".join(assembled_parts)
+                                        response = cont_response_json
+                                    if "MAX_TOKENS" not in (cont_note or ""):
+                                        break
+                                text = "\n\n".join([part for part in assembled_parts if part]).strip()
+
                             if track_usage:
                                 update_daily_usage(system_prompt + "\n" + user_prompt, text, response)
                             if chosen_model != model:
