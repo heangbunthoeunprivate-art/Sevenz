@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+.sevenz_settings.json
+.env
+.streamlit/secrets.toml
